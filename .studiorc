@@ -1,0 +1,59 @@
+function dkr {
+  echo "Creating Docker Image from $1"
+  hab pkg export docker $1
+}
+
+# Usage
+#
+# run pkg_name          # Run the latest
+# run pkg_name HEAD     # Run the latest
+# run pkg_name HEAD~1   # Run the second to last
+# run pkg_name ~1       # Run the second to last
+#
+function run() {
+  local pkg_name=$1
+  local pkg_position=$2
+
+  local found_pkgs=( ./results/$HAB_ORIGIN-$pkg_name-*.hart )
+  local pkg_count=${#found_pkgs[@]}
+
+  declare -A indexed_pkgs
+
+  for i in ${!found_pkgs[@]}; do
+      current_count=$((pkg_count-1-i))
+      if [ $current_count == 0 ] ; then
+        indexed_pkgs+=([HEAD]=${found_pkgs[$i]})
+      else
+        indexed_pkgs+=([HEAD~$current_count]=${found_pkgs[$i]})
+        indexed_pkgs+=([~$current_count]=${found_pkgs[$i]})
+      fi
+  done
+
+  # Run the latest package if no pkg_position has been specified.
+  local pkg_to_run=${indexed_pkgs[HEAD]}
+
+  # If there is a pkg_position then find that package. Stop if it cannot.
+  if ! [ -z "$pkg_position" ] ; then
+    pkg_to_run=${indexed_pkgs[$pkg_position]}
+
+    if [ -z "$pkg_to_run" ] ; then
+      echo "Could not find a package at $pkg_position. There are $pkg_count total package(s)."
+      return
+    fi
+  fi
+
+  echo "Running $pkg_to_run"
+  hab sup start $pkg_to_run
+}
+
+function stop {
+  echo "Stopping $1"
+  hab svc stop $HAB_ORIGIN/$1
+}
+
+function get {
+  echo "Getting $1"
+  hab pkg install -b core/$1
+}
+
+export HAB_DOCKER_OPTS="-p 8000:80"
